@@ -3,6 +3,7 @@
 .kotlin
 /build
 /app/build
+/app/google-services.json
 /captures
 
 .idea/

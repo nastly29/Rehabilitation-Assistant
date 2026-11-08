@@ -21,10 +21,13 @@
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
 
-    <!-- Вказуємо, що наявність апаратного BLE не є обов'язковою для встановлення додатка -->
-    <uses-feature
-        android:name="android.hardware.bluetooth_le"
-        android:required="false" />
+    <uses-permission android:name="android.permission.INTERNET" /> <!--без нього застосунок не має права виходити в мережу-->
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" /> <!--щоб перевіряти, чи є інтернет-->
+
+    <uses-permission android:name="android.permission.VIBRATE" />
+
+    <uses-feature android:name="android.hardware.camera.flash" android:required="false" />
+    <uses-feature android:name="android.hardware.bluetooth_le" android:required="false" />
 
     <application
         android:allowBackup="true"
