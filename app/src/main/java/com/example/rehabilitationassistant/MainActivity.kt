@@ -26,6 +26,8 @@ import com.example.rehabilitationassistant.ui.ble.BleScreen
 import com.example.rehabilitationassistant.ui.ble.BleViewModel
 import com.example.rehabilitationassistant.ui.cloud.CloudSyncIndicator
 import com.example.rehabilitationassistant.ui.cloud.CloudViewModel
+import com.example.rehabilitationassistant.ui.control.ControlPanel
+import com.example.rehabilitationassistant.ui.control.ControlViewModel
 import com.example.rehabilitationassistant.ui.dashboard.RehabilitationScreen
 import com.example.rehabilitationassistant.ui.dashboard.RehabilitationStatus
 import com.example.rehabilitationassistant.ui.dashboard.RehabilitationViewModel
@@ -34,10 +36,11 @@ import com.example.rehabilitationassistant.ui.theme.*
 // Головна точка входу в застосунок
 class MainActivity : ComponentActivity() {
 
-    // Три ViewModel: by viewModels() створює їх і зберігає при повороті екрана
+    // ViewModel: by viewModels() створює їх і зберігає при повороті екрана
     private val viewModel: RehabilitationViewModel by viewModels()   // вправа
     private val bleViewModel: BleViewModel by viewModels()           // Bluetooth
-    private val cloudViewModel: CloudViewModel by viewModels()   // Змінна для хмарної ViewModel: керує відправкою даних датчика в хмару
+    private val cloudViewModel: CloudViewModel by viewModels()       // хмарна синхронізація
+    private val controlViewModel: ControlViewModel by viewModels()   // актуатори й команди з хмари
     private lateinit var dataSource: AccelerometerDataSource         // джерело даних акселерометра
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -58,8 +61,10 @@ class MainActivity : ComponentActivity() {
                     val state by viewModel.uiState.collectAsState()
                     val bleState by bleViewModel.uiState.collectAsState()
 
-                    // Стан хмарної синхронізації зі ViewModel; при кожній зміні екран оновлюється сам
+                    // Стан хмарної синхронізації; при кожній зміні екран оновлюється сам
                     val cloudState by cloudViewModel.uiState.collectAsState()
+                    // Стан актуаторів і віртуальної лампи
+                    val controlState by controlViewModel.uiState.collectAsState()
 
                     var tab by remember { mutableIntStateOf(0) }
                     val context = LocalContext.current
@@ -69,6 +74,13 @@ class MainActivity : ComponentActivity() {
                         cloudViewModel.messages.collect {
                             Toast.makeText(context, it, Toast.LENGTH_LONG).show()
                         }
+                    }
+
+                    // АВТОМАТИЧНЕ КЕРУВАННЯ: кут іде в DecisionEngine (через ControlViewModel)
+                    // LaunchedEffect(state.angle) - щоразу, коли кут змінився, виконається цей блок
+                    // ControlViewModel сам вирішує: перевищено 90° чи ні, і вмикає вібрацію й ліхтарик
+                    LaunchedEffect(state.angle) {
+                        controlViewModel.onAngle(state.angle)
                     }
 
                     // Передача даних вправи на BLE-хаб: лічильники повторень
@@ -92,21 +104,27 @@ class MainActivity : ComponentActivity() {
                         ) {
                             Tab(selected = tab == 0, onClick = { tab = 0 }, text = { Text("Вправа") })
                             Tab(selected = tab == 1, onClick = { tab = 1 }, text = { Text("BLE-хаб") })
+                            Tab(selected = tab == 2, onClick = { tab = 2 }, text = { Text("Керування") })
                         }
-                        CloudSyncIndicator(cloudState)   // видно на обох вкладках
-                        if (tab == 0) {
-                            RehabilitationScreen(
+                        CloudSyncIndicator(cloudState)   // видно на всіх вкладках
+                        when (tab) {
+                            0 -> RehabilitationScreen(
                                 state = state,
                                 sensorAvailable = dataSource.isAvailable,
                                 onReset = viewModel::reset
                             )
-                        } else {
-                            BleScreen(
+                            1 -> BleScreen(
                                 state = bleState,
                                 onScan = bleViewModel::startScan,
                                 onConnect = bleViewModel::connect,
                                 onDisconnect = bleViewModel::disconnect,
                                 onSend = bleViewModel::sendData
+                            )
+                            else -> ControlPanel(
+                                state = controlState,
+                                onFlashlight = controlViewModel::setFlashlight,
+                                onVibrate = controlViewModel::vibrate,
+                                onLamp = controlViewModel::setLamp
                             )
                         }
                     }
