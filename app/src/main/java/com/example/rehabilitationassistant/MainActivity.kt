@@ -22,6 +22,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import com.example.rehabilitationassistant.sensor.AccelerometerDataSource
+import com.example.rehabilitationassistant.ui.analytics.AnalyticsScreen
+import com.example.rehabilitationassistant.ui.analytics.SensorViewModel
 import com.example.rehabilitationassistant.ui.ble.BleScreen
 import com.example.rehabilitationassistant.ui.ble.BleViewModel
 import com.example.rehabilitationassistant.ui.cloud.CloudSyncIndicator
@@ -41,6 +43,9 @@ class MainActivity : ComponentActivity() {
     private val bleViewModel: BleViewModel by viewModels()           // Bluetooth
     private val cloudViewModel: CloudViewModel by viewModels()       // хмарна синхронізація
     private val controlViewModel: ControlViewModel by viewModels()   // актуатори й команди з хмари
+
+    // Оголошення змінної для ViewModel історії: вона записує кути в БД і віддає їх для графіка
+    private val sensorViewModel: SensorViewModel by viewModels()     // історія в БД і графік
     private lateinit var dataSource: AccelerometerDataSource         // джерело даних акселерометра
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -66,6 +71,9 @@ class MainActivity : ComponentActivity() {
                     // Стан актуаторів і віртуальної лампи
                     val controlState by controlViewModel.uiState.collectAsState()
 
+                    // Останні 50 записів з БД; коли в БД з'являється новий рядок, значення змінюється і графік перемальовується
+                    val records by sensorViewModel.records.collectAsState()
+
                     var tab by remember { mutableIntStateOf(0) }
                     val context = LocalContext.current
 
@@ -77,10 +85,13 @@ class MainActivity : ComponentActivity() {
                     }
 
                     // АВТОМАТИЧНЕ КЕРУВАННЯ: кут іде в DecisionEngine (через ControlViewModel)
-                    // LaunchedEffect(state.angle) - щоразу, коли кут змінився, виконається цей блок
-                    // ControlViewModel сам вирішує: перевищено 90° чи ні, і вмикає вібрацію й ліхтарик
                     LaunchedEffect(state.angle) {
                         controlViewModel.onAngle(state.angle)
+                    }
+
+                    // ЗБЕРЕЖЕННЯ В БД: щоразу, коли змінився кут, передаємо його у ViewModel
+                    LaunchedEffect(state.angle) {
+                        sensorViewModel.onSample(state.angle, controlState.alarmActive)
                     }
 
                     // Передача даних вправи на BLE-хаб: лічильники повторень
@@ -105,6 +116,7 @@ class MainActivity : ComponentActivity() {
                             Tab(selected = tab == 0, onClick = { tab = 0 }, text = { Text("Вправа") })
                             Tab(selected = tab == 1, onClick = { tab = 1 }, text = { Text("BLE-хаб") })
                             Tab(selected = tab == 2, onClick = { tab = 2 }, text = { Text("Керування") })
+                            Tab(selected = tab == 3, onClick = { tab = 3 }, text = { Text("Аналітика") })
                         }
                         CloudSyncIndicator(cloudState)   // видно на всіх вкладках
                         when (tab) {
@@ -120,11 +132,15 @@ class MainActivity : ComponentActivity() {
                                 onDisconnect = bleViewModel::disconnect,
                                 onSend = bleViewModel::sendData
                             )
-                            else -> ControlPanel(
+                            2 -> ControlPanel(
                                 state = controlState,
                                 onFlashlight = controlViewModel::setFlashlight,
                                 onVibrate = controlViewModel::vibrate,
                                 onLamp = controlViewModel::setLamp
+                            )
+                            else -> AnalyticsScreen(
+                                records = records,
+                                onClear = sensorViewModel::clear
                             )
                         }
                     }
