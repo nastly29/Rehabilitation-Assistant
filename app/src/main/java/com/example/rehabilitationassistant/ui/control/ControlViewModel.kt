@@ -14,6 +14,9 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 // Усе, що потрібно намалювати на вкладці "Керування" (екран лише читає це)
 data class ControlUiState(
@@ -101,8 +104,23 @@ class ControlViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    // РУЧНЕ керування (кнопки панелі Manual Control)
+    // модель виявила аномалію (різкий ривок): вібрація і ліхтарик на 3 секунди
+    fun onAnomaly() {
+        Log.w(TAG, "АНОМАЛІЯ від ШІ: вмикаємо вібрацію і ліхтарик")
+        actuator.triggerAlarm()            // вібрація
+        actuator.toggleFlashlight(true)    // ліхтарик
+        _uiState.update { it.copy(flashlightOn = true) }
+        viewModelScope.launch {
+            delay(3_000)                   // чекаємо 3 секунди
+            // Якщо в цей час не працює тривога за кутом, вимикаємо ліхтарик
+            if (!_uiState.value.alarmActive) {
+                actuator.toggleFlashlight(false)
+                _uiState.update { it.copy(flashlightOn = false) }
+            }
+        }
+    }
 
+    // РУЧНЕ керування (кнопки панелі Manual Control)
     // Перемикач "Ліхтарик": вмикаємо справжній ліхтарик і запам'ятовуємо стан для екрана
     fun setFlashlight(on: Boolean) {
         actuator.toggleFlashlight(on)

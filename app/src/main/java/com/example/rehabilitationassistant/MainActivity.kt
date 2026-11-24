@@ -34,6 +34,9 @@ import com.example.rehabilitationassistant.ui.dashboard.RehabilitationScreen
 import com.example.rehabilitationassistant.ui.dashboard.RehabilitationStatus
 import com.example.rehabilitationassistant.ui.dashboard.RehabilitationViewModel
 import com.example.rehabilitationassistant.ui.theme.*
+import com.example.rehabilitationassistant.ml.ActivityClassifier
+import com.example.rehabilitationassistant.ui.ai.AiInsightsCard
+import com.example.rehabilitationassistant.ui.ai.AiViewModel
 
 // Головна точка входу в застосунок
 class MainActivity : ComponentActivity() {
@@ -44,8 +47,9 @@ class MainActivity : ComponentActivity() {
     private val cloudViewModel: CloudViewModel by viewModels()       // хмарна синхронізація
     private val controlViewModel: ControlViewModel by viewModels()   // актуатори й команди з хмари
 
-    // Оголошення змінної для ViewModel історії: вона записує кути в БД і віддає їх для графіка
     private val sensorViewModel: SensorViewModel by viewModels()     // історія в БД і графік
+
+    private val aiViewModel: AiViewModel by viewModels()             // розпізнавання руху моделлю
     private lateinit var dataSource: AccelerometerDataSource         // джерело даних акселерометра
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -55,6 +59,7 @@ class MainActivity : ComponentActivity() {
         dataSource = AccelerometerDataSource(this) {
             viewModel.onSensorData(it)        // для вправи (кут, повторення)
             cloudViewModel.onSensorData(it)   // для хмари (запам'ятати останнє)
+            aiViewModel.onSensorData(it)  // для моделі (вікно з 20 вимірів)
         }
 
         setContent {
@@ -74,6 +79,9 @@ class MainActivity : ComponentActivity() {
                     // Останні 50 записів з БД; коли в БД з'являється новий рядок, значення змінюється і графік перемальовується
                     val records by sensorViewModel.records.collectAsState()
 
+                    // Прогноз моделі (блок "AI Insights" оновлюється сам)
+                    val aiState by aiViewModel.uiState.collectAsState()
+
                     var tab by remember { mutableIntStateOf(0) }
                     val context = LocalContext.current
 
@@ -92,6 +100,13 @@ class MainActivity : ComponentActivity() {
                     // ЗБЕРЕЖЕННЯ В БД: щоразу, коли змінився кут, передаємо його у ViewModel
                     LaunchedEffect(state.angle) {
                         sensorViewModel.onSample(state.angle, controlState.alarmActive)
+                    }
+
+                    // Реакція на прогноз моделі; виконується лише тоді, коли змінився клас
+                    // "Швидкий рух" - пишемо в БД частіше (ЛР5), "Аномалія" - вмикаємо актуатори (ЛР4)
+                    LaunchedEffect(aiState.label) {
+                        sensorViewModel.setFastMode(aiState.label == ActivityClassifier.FAST_MOVE)
+                        if (aiState.label == ActivityClassifier.ANOMALY) controlViewModel.onAnomaly()
                     }
 
                     // Передача даних вправи на BLE-хаб: лічильники повторень
@@ -119,6 +134,7 @@ class MainActivity : ComponentActivity() {
                             Tab(selected = tab == 3, onClick = { tab = 3 }, text = { Text("Аналітика") })
                         }
                         CloudSyncIndicator(cloudState)   // видно на всіх вкладках
+                        AiInsightsCard(aiState)  // блок "AI Insights" (видно на всіх вкладках)
                         when (tab) {
                             0 -> RehabilitationScreen(
                                 state = state,

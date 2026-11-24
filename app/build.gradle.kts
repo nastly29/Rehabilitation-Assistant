@@ -62,4 +62,5 @@ dependencies {
     implementation("androidx.room:room-ktx:2.7.2")
     ksp("androidx.room:room-compiler:2.7.2")
     implementation("com.github.PhilJay:MPAndroidChart:v3.1.0")
+    implementation("org.tensorflow:tensorflow-lite:2.16.1")
 }
